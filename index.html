@@ -1,0 +1,293 @@
+<!DOCTYPE html><html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GitHub Zip Uploader</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: linear-gradient(135deg, #000 0%, #444 100%);
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #fff;
+    }
+    .card {
+      background: rgba(0, 0, 0, 0.85);
+      padding: 30px;
+      border-radius: 16px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+      width: 100%;
+      max-width: 500px;
+      animation: fadeIn 0.6s ease;
+      backdrop-filter: blur(12px);
+      border: 3px solid;
+      border-image: linear-gradient(90deg, #fff, #000, #fff) 1;
+      animation: borderAnim 4s linear infinite;
+    }
+    @keyframes borderAnim {
+      0% { border-image: linear-gradient(90deg, #fff, #000, #fff) 1; }
+      50% { border-image: linear-gradient(270deg, #000, #fff, #000) 1; }
+      100% { border-image: linear-gradient(90deg, #fff, #000, #fff) 1; }
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 10px;
+      font-size: 1.8rem;
+    }
+    p {
+      text-align: center;
+      font-size: 0.9rem;
+      color: #bbb;
+      margin-bottom: 20px;
+    }
+    button, input[type="file"] {
+      width: 100%;
+      padding: 14px;
+      margin-top: 12px;
+      border-radius: 8px;
+      border: none;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .btn-login {
+      background: #fff;
+      color: #000;
+    }
+    .btn-login:hover {
+      background: #ddd;
+    }
+    .btn-action {
+      background: #000;
+      color: #fff;
+      border: 2px solid #fff;
+    }
+    .btn-action:hover {
+      background: #fff;
+      color: #000;
+    }
+    .hidden { display: none; }
+    .error-box {
+      background: #300;
+      color: #f88;
+      padding: 10px;
+      border-radius: 6px;
+      margin-top: 10px;
+      font-size: 0.85rem;
+      display: none;
+    }
+    .log-container {
+      margin-top: 20px;
+      background: #111;
+      color: #0f0;
+      padding: 15px;
+      border-radius: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.8rem;
+    }
+    .spinner {
+      border: 4px solid rgba(255,255,255,0.2);
+      border-top: 4px solid #fff;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .progress-bar-container {
+      width: 100%;
+      background: #333;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 12px;
+      height: 14px;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, #fff, #000);
+      transition: width 0.3s ease;
+    }
+    .file-status {
+      font-size: 0.8rem;
+      margin-top: 6px;
+      padding: 4px 6px;
+      border-radius: 4px;
+    }
+    .file-status.success { color: #0f0; }
+    .file-status.error { color: #f55; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Upload ZIP ke GitHub</h2>
+    <p>Login dengan GitHub, pilih ZIP, dan otomatis upload ke repo.</p><button class="btn-login" id="loginBtn">Login dengan GitHub</button>
+
+<div id="authSection" class="hidden">
+  <input type="file" id="zipfile" accept=".zip" />
+  <button class="btn-action" id="uploadBtn">Upload & Unzip</button>
+  <div class="progress-bar-container hidden" id="progressContainer">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+  <div id="fileStatusList"></div>
+</div>
+
+<div id="errorBox" class="error-box"></div>
+<div id="log" class="log-container"></div>
+
+  </div>  <script>
+    const clientId = "YOUR_CLIENT_ID";
+    const redirectUri = window.location.origin + window.location.pathname;
+    const proxyUrl = "https://YOUR-VERCEL-APP.vercel.app/api/oauth";
+
+    let accessToken = localStorage.getItem("gh_token");
+
+    const loginBtn = document.getElementById("loginBtn");
+    const authSection = document.getElementById("authSection");
+    const errorBox = document.getElementById("errorBox");
+    const logEl = document.getElementById("log");
+    const progressContainer = document.getElementById("progressContainer");
+    const progressBar = document.getElementById("progressBar");
+    const fileStatusList = document.getElementById("fileStatusList");
+
+    function log(msg) {
+      const line = document.createElement("div");
+      line.textContent = msg;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function showError(msg) {
+      errorBox.textContent = msg;
+      errorBox.style.display = "block";
+    }
+
+    loginBtn.addEventListener("click", () => {
+      const url = `https://github.com/login/oauth/authorize?client_id=${clientId}&scope=repo&redirect_uri=${encodeURIComponent(redirectUri)}`;
+      window.location.href = url;
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("code")) {
+      const code = params.get("code");
+      log("Code OAuth didapat: " + code);
+      loginBtn.innerHTML = '<span class="spinner"></span>Login...';
+      fetch(proxyUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.access_token) {
+          accessToken = data.access_token;
+          localStorage.setItem("gh_token", accessToken);
+          authSection.classList.remove("hidden");
+          loginBtn.style.display = "none";
+          log("Login berhasil, siap upload.");
+        } else {
+          showError("Gagal mendapatkan access_token: " + (data.error || "Unknown error"));
+        }
+      })
+      .catch(err => showError("Error: " + err.message));
+    } else if (accessToken) {
+      authSection.classList.remove("hidden");
+      loginBtn.style.display = "none";
+      log("Login otomatis dari token tersimpan.");
+    }
+
+    async function uploadFileToGitHub(owner, repo, path, contentBase64, message) {
+      if (!accessToken) throw new Error("Belum login.");
+      const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`;
+
+      let sha = null;
+      const resGet = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (resGet.status === 200) {
+        const data = await resGet.json();
+        sha = data.sha;
+      }
+
+      const body = { message, content: contentBase64 };
+      if (sha) body.sha = sha;
+
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || res.statusText);
+      }
+      return await res.json();
+    }
+
+    document.getElementById("uploadBtn").addEventListener("click", async () => {
+      errorBox.style.display = "none";
+      logEl.innerHTML = "";
+      fileStatusList.innerHTML = "";
+      const fileInput = document.getElementById("zipfile");
+      if (!fileInput.files.length) return showError("Pilih file ZIP dulu.");
+
+      try {
+        const file = fileInput.files[0];
+        log(`Membaca file ZIP: ${file.name}`);
+        const arrayBuffer = await file.arrayBuffer();
+        const zip = await JSZip.loadAsync(arrayBuffer);
+
+        const OWNER = "YOUR_USERNAME";
+        const REPO = "YOUR_REPO";
+
+        const files = Object.keys(zip.files).filter(f => !zip.files[f].dir);
+        let uploaded = 0;
+        progressContainer.classList.remove("hidden");
+
+        for (const filename of files) {
+          const statusLine = document.createElement("div");
+          statusLine.textContent = `⏳ ${filename}`;
+          statusLine.className = "file-status";
+          fileStatusList.appendChild(statusLine);
+
+          try {
+            const zipEntry = zip.files[filename];
+            const content = await zipEntry.async("base64");
+            await uploadFileToGitHub(OWNER, REPO, filename, content, `Upload ${filename}`);
+            uploaded++;
+            statusLine.textContent = `✔️ ${filename}`;
+            statusLine.classList.add("success");
+          } catch (err) {
+            statusLine.textContent = `❌ ${filename} (${err.message})`;
+            statusLine.classList.add("error");
+          }
+
+          const progress = Math.round((uploaded / files.length) * 100);
+          progressBar.style.width = progress + "%";
+        }
+        log("Selesai proses upload.");
+      } catch (e) {
+        showError("Error: " + e.message);
+      }
+    });
+  </script></body>
+</html>
