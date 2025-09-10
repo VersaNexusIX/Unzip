@@ -15,53 +15,81 @@
       background: #000;
       font-family: 'Segoe UI', Arial, sans-serif;
       color: #fff;
+      overflow: hidden;
     }
-    .card {
-      background: rgba(0, 0, 0, 0.85);
-      padding: 30px;
-      border-radius: 16px;
-      width: 100%;
-      max-width: 520px;
-      animation: fadeIn 0.6s ease;
-      backdrop-filter: blur(12px);
-      border: 3px solid;
-      border-image: linear-gradient(270deg, #000, #fff, #000) 1;
-      animation: borderAnim 3s linear infinite;
+    /* Animated gradient background */
+    body::before {
+      content: "";
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: conic-gradient(#000, #222, #000, #111, #000);
+      animation: spin 20s linear infinite;
+      z-index: 0;
     }
-    @keyframes borderAnim {
-      0% { border-image: linear-gradient(270deg, #000, #fff, #000) 1; }
-      50% { border-image: linear-gradient(270deg, #fff, #000, #fff) 1; }
-      100% { border-image: linear-gradient(270deg, #000, #fff, #000) 1; }
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+    .container {
+      position: relative;
+      z-index: 1;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 2rem;
+      border-radius: 1rem;
+      width: 95%;
+      max-width: 600px;
+      text-align: center;
+      backdrop-filter: blur(10px);
+      overflow: hidden;
+    }
+    .container::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      padding: 2px;
+      border-radius: inherit;
+      background: linear-gradient(270deg, #000, #fff, #000);
+      background-size: 400% 400%;
+      animation: borderFlow 6s linear infinite;
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      z-index: -1;
+    }
+    @keyframes borderFlow {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
     }
     h2 {
-      text-align: center;
       margin-bottom: 10px;
-      font-size: 1.8rem;
     }
     p {
-      text-align: center;
       font-size: 0.9rem;
       color: #bbb;
       margin-bottom: 20px;
     }
-    button, input[type="file"], select {
+    button, select, input[type="file"] {
       width: 100%;
-      padding: 14px;
+      padding: 12px;
       margin-top: 12px;
       border-radius: 8px;
       border: none;
       font-size: 1rem;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.3s ease;
+      transition: transform 0.2s ease, background 0.3s ease;
+    }
+    button:active {
+      transform: scale(0.96);
     }
     .btn-login {
       background: #fff;
       color: #000;
     }
-    .btn-login:hover {
-      background: #ddd;
-    }
+    .btn-login:hover { background: #ddd; }
     .btn-action {
       background: #000;
       color: #fff;
@@ -81,7 +109,7 @@
       font-size: 0.85rem;
       display: none;
     }
-    .log-container {
+    .log-window {
       margin-top: 20px;
       background: #111;
       color: #0f0;
@@ -91,42 +119,60 @@
       overflow-y: auto;
       font-family: monospace;
       font-size: 0.8rem;
+      text-align: left;
     }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
+    .progress-container {
+      margin-top: 15px;
+      background: #222;
+      border-radius: 8px;
+      overflow: hidden;
+      height: 20px;
+      display: none;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #0f0, #0ff);
+      transition: width 0.3s ease;
     }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h2>Upload ZIP ke GitHub</h2>
-    <p>Login dengan GitHub, pilih repo & file ZIP, lalu upload otomatis.</p>
+  <div class="container">
+    <h2>GitHub ZIP Uploader</h2>
+    <p>Login dengan GitHub, pilih repository dan file ZIP untuk diupload otomatis.</p>
 
     <button class="btn-login" id="loginBtn">Login dengan GitHub</button>
 
     <div id="authSection" class="hidden">
-      <label>Pilih Repository:</label>
       <select id="repoSelect"></select>
       <input type="file" id="zipfile" accept=".zip" />
       <button class="btn-action" id="uploadBtn">Upload & Unzip</button>
     </div>
 
     <div id="errorBox" class="error-box"></div>
-    <div id="log" class="log-container"></div>
+
+    <div class="progress-container" id="progressContainer">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <div class="log-window" id="log"></div>
   </div>
 
   <script>
-    const clientId = "Ov23lic160MPJU261DRg"; // ganti Client ID GitHub OAuth App
-    const redirectUri = window.location.origin; 
-    const proxyUrl = "https://YOUR-VERCEL-APP.vercel.app/api/oauth"; // backend vercel
+    const clientId = "Ov23lic160MPJU261DRg"; // fix client id
+    const redirectUri = window.location.origin + window.location.pathname;
+    const proxyUrl = "/api/oauth"; // backend di vercel
 
     let accessToken = null;
+
     const loginBtn = document.getElementById("loginBtn");
     const authSection = document.getElementById("authSection");
-    const repoSelect = document.getElementById("repoSelect");
     const errorBox = document.getElementById("errorBox");
     const logEl = document.getElementById("log");
+    const repoSelect = document.getElementById("repoSelect");
+    const progressContainer = document.getElementById("progressContainer");
+    const progressBar = document.getElementById("progressBar");
 
     function log(msg) {
       const line = document.createElement("div");
@@ -134,6 +180,7 @@
       logEl.appendChild(line);
       logEl.scrollTop = logEl.scrollHeight;
     }
+
     function showError(msg) {
       errorBox.textContent = msg;
       errorBox.style.display = "block";
@@ -144,26 +191,47 @@
       window.location.href = url;
     });
 
-    async function getUser() {
-      const res = await fetch("https://api.github.com/user", {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
-      if (!res.ok) throw new Error("Gagal ambil user info");
-      return await res.json();
-    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("code")) {
+      const code = params.get("code");
+      log("Code OAuth didapat: " + code);
 
-    async function getRepos() {
-      const res = await fetch("https://api.github.com/user/repos?per_page=100", {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
-      if (!res.ok) throw new Error("Gagal ambil daftar repo");
-      return await res.json();
+      fetch(proxyUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code })
+      })
+      .then(res => res.json())
+      .then(async data => {
+        if (data.access_token) {
+          accessToken = data.access_token;
+          authSection.classList.remove("hidden");
+          loginBtn.style.display = "none";
+          log("Login berhasil, siap upload.");
+
+          // ambil daftar repo user
+          const repoRes = await fetch("https://api.github.com/user/repos", {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          });
+          const repos = await repoRes.json();
+          repoSelect.innerHTML = "";
+          repos.forEach(r => {
+            const opt = document.createElement("option");
+            opt.value = r.full_name;
+            opt.textContent = r.full_name;
+            repoSelect.appendChild(opt);
+          });
+        } else {
+          showError("Gagal mendapatkan access_token: " + (data.error || "Unknown error"));
+        }
+      })
+      .catch(err => showError("Error: " + err.message));
     }
 
     async function uploadFileToGitHub(owner, repo, path, contentBase64, message) {
       const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`;
-      let sha = null;
 
+      let sha = null;
       const resGet = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
       if (resGet.status === 200) {
         const data = await resGet.json();
@@ -189,48 +257,11 @@
       return await res.json();
     }
 
-    const params = new URLSearchParams(window.location.search);
-    if (params.has("code")) {
-      const code = params.get("code");
-      fetch(proxyUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code })
-      })
-      .then(res => res.json())
-      .then(async data => {
-        if (data.access_token) {
-          accessToken = data.access_token;
-          loginBtn.style.display = "none";
-          authSection.classList.remove("hidden");
-          log("Login berhasil.");
-
-          const user = await getUser();
-          log("User: " + user.login);
-
-          const repos = await getRepos();
-          repoSelect.innerHTML = "";
-          repos.forEach(r => {
-            const opt = document.createElement("option");
-            opt.value = r.name;
-            opt.textContent = r.full_name;
-            repoSelect.appendChild(opt);
-          });
-        } else {
-          showError("Gagal dapat token: " + (data.error || "Unknown error"));
-        }
-      })
-      .catch(err => showError("Error: " + err.message));
-    }
-
     document.getElementById("uploadBtn").addEventListener("click", async () => {
       errorBox.style.display = "none";
       logEl.innerHTML = "";
-
       const fileInput = document.getElementById("zipfile");
       if (!fileInput.files.length) return showError("Pilih file ZIP dulu.");
-      const repoName = repoSelect.value;
-      if (!repoName) return showError("Pilih repo dulu.");
 
       try {
         const file = fileInput.files[0];
@@ -238,16 +269,21 @@
         const arrayBuffer = await file.arrayBuffer();
         const zip = await JSZip.loadAsync(arrayBuffer);
 
-        const user = await getUser();
-        const owner = user.login;
+        const [owner, repo] = repoSelect.value.split("/");
 
-        for (const filename in zip.files) {
+        const files = Object.keys(zip.files).filter(f => !zip.files[f].dir);
+        let uploaded = 0;
+        progressContainer.style.display = "block";
+
+        for (const filename of files) {
           const zipEntry = zip.files[filename];
-          if (zipEntry.dir) continue;
           log(`Uploading: ${filename}`);
           const content = await zipEntry.async("base64");
-          await uploadFileToGitHub(owner, repoName, filename, content, `Upload ${filename}`);
+          await uploadFileToGitHub(owner, repo, filename, content, `Upload ${filename}`);
+          uploaded++;
+          progressBar.style.width = `${(uploaded / files.length) * 100}%`;
         }
+
         log("Selesai upload semua file.");
       } catch (e) {
         showError("Error: " + e.message);
