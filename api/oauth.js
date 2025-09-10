@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   try {
     const client_id = "Ov23lic160MPJU261DRg"; // client id yang lu kasih
     const client_secret = process.env.GITHUB_CLIENT_SECRET; // simpen di vercel env
-    const redirect_uri = "https://your-app.vercel.app"; // ganti sesuai domain lu
+    const redirect_uri = "https://gunzip.vercel.app/"; // ganti sesuai domain lu
 
     const response = await fetch("https://github.com/login/oauth/access_token", {
       method: "POST",
